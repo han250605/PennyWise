@@ -91,7 +91,7 @@ def test_expense_changes_can_be_saved_and_loaded(tmp_path) -> None:
 
 def test_menu_adds_an_expense_and_saves_it(tmp_path, monkeypatch) -> None:
     data_file = tmp_path / "pennywise.json"
-    answers = iter(["1", "18.25", "1", "Groceries", "2026-03-15", "5"])
+    answers = iter(["1", "18.25", "1", "Groceries", "2026-03-15", "6"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
 
     run_menu(data_file)

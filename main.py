@@ -1,6 +1,7 @@
 """Run the PennyWise command-line application."""
 
 from datetime import date
+from calendar import month_name
 from pathlib import Path
 
 from expenses import (
@@ -14,6 +15,7 @@ from expenses import (
     validate_description,
     validate_category,
 )
+from reports import build_monthly_report, validate_month_year
 from storage import DATA_FILE, load_data, save_data
 
 
@@ -160,6 +162,35 @@ def delete_expense_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
     print(f"Deleted expense: {deleted_expense['description']}.")
 
 
+def display_monthly_overview(data: dict) -> None:
+    """Ask for a month and display its spending report and chart."""
+    while True:
+        month = input("Month (1-12): ").strip()
+        year = input("Year (for example, 2026): ").strip()
+        try:
+            month, year = validate_month_year(month, year)
+            break
+        except ValueError as error:
+            print(error)
+
+    report = build_monthly_report(data["expenses"], month, year)
+    print("\n===== MONTHLY SPENDING OVERVIEW =====")
+    print(f"\nMonth: {month_name[month]} {year}")
+    print(f"\nTotal Monthly Spending: ${report['total']:.2f}")
+
+    if not report["categories"]:
+        print("\nNo expenses were recorded for this month.")
+        return
+
+    print()
+    for item in report["categories"]:
+        print(f"{item['category']:<18} ${item['amount']:>7.2f}")
+        print(f"  {item['bar']} {item['percentage']:>5.1f}%\n")
+
+    print(f"\nHighest Spending Category: {report['highest_category']}")
+    print(f"Lowest Spending Category: {report['lowest_category']}")
+
+
 def run_menu(file_path: Path = DATA_FILE) -> None:
     """Load saved data and repeatedly show the expense menu."""
     data = load_data(file_path)
@@ -168,20 +199,21 @@ def run_menu(file_path: Path = DATA_FILE) -> None:
         "2": ("View Expenses", lambda saved_data: display_expenses(saved_data["expenses"])),
         "3": ("Edit Expense", lambda saved_data: edit_expense_from_menu(saved_data, file_path)),
         "4": ("Delete Expense", lambda saved_data: delete_expense_from_menu(saved_data, file_path)),
+        "5": ("Monthly Spending Overview", display_monthly_overview),
     }
 
     while True:
         print("\n===== PENNYWISE =====")
         for number, (label, _) in menu_options.items():
             print(f"{number}. {label}")
-        print("5. Exit")
+        print("6. Exit")
 
         choice = input("Select an option: ").strip()
-        if choice == "5":
+        if choice == "6":
             print("Goodbye.")
             break
         if choice not in menu_options:
-            print("Please choose a number from 1 to 5.")
+            print("Please choose a number from 1 to 6.")
             continue
 
         _, selected_action = menu_options[choice]
