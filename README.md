@@ -24,11 +24,11 @@ The coach is a **rule-based program**, not a generative AI model. It applies pre
 
 ## Installation
 
-1. Clone the published project. Replace the placeholder with the URL of the public repository after it has been created:
+1. Clone the repository:
 
    ```text
-   git clone https://github.com/<YOUR-USERNAME>/PennyWise.git
-   cd PennyWise
+   git clone https://github.com/han250605/PennyWise.git
+cd PennyWise
    ```
 
 2. Create a virtual environment using Python 3.12:
@@ -259,4 +259,3 @@ Tests use pytest temporary directories or in-memory values rather than the real 
 - The coach uses predefined rules and percentages. It is not generative AI, a financial advisor, or a complete assessment of someone's financial health.
 - Spending recommendations and goal projections are estimates. Results depend on accurate entries and, for projections, on successfully following the stated savings plan and redirecting any reduced spending.
 - The application has no multi-user accounts, cloud backup, or advanced recovery for a JSON file whose individual records have an invalid structure.
-- The clone URL in the installation example is a placeholder until the public course repository is published.
