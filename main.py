@@ -388,18 +388,11 @@ def display_financial_coach(data: dict) -> None:
                 f"{insight['threshold']}%. {insight['message']}"
             )
             if analysis["goal"]:
-                if analysis["goal"].get("planned_monthly_contribution") is None:
-                    print(
-                        f'Reducing {insight["category"].lower()} expenses by '
-                        f"${insight['suggested_reduction']:.2f} per month could help you "
-                        f"reach your \"{analysis['goal']['name']}\" savings goal sooner."
-                    )
-                else:
-                    print(
-                        f'Reducing {insight["category"].lower()} expenses by '
-                        f"${insight['suggested_reduction']:.2f} per month could help you "
-                        f"reach your \"{analysis['goal']['name']}\" savings goal sooner."
-                    )
+                print(
+                    f'Reducing {insight["category"].lower()} expenses by '
+                    f"${insight['suggested_reduction']:.2f} per month could help you "
+                    f"reach your \"{analysis['goal']['name']}\" savings goal sooner."
+                )
             else:
                 print(
                     f"Reducing {insight['category'].lower()} expenses by "
@@ -452,7 +445,13 @@ def display_financial_coach(data: dict) -> None:
 
 def run_menu(file_path: Path = DATA_FILE) -> None:
     """Load saved data and repeatedly show the main menu."""
-    data = load_data(file_path)
+    try:
+        data = load_data(file_path)
+    except (OSError, ValueError) as error:
+        print(f"Could not load PennyWise data from {file_path}: {error}")
+        print("The data file was left unchanged. Check or restore it before trying again.")
+        return
+
     if assign_missing_reference_ids(data["expenses"]):
         save_data(data, file_path)
     while True:

@@ -3,6 +3,7 @@
 import json
 
 from storage import create_empty_data, load_data, save_data
+from main import run_menu
 
 
 def test_create_empty_data_has_expected_sections() -> None:
@@ -41,3 +42,14 @@ def test_save_data_writes_readable_json(tmp_path) -> None:
     save_data(create_empty_data(), data_file)
 
     assert json.loads(data_file.read_text(encoding="utf-8")) == create_empty_data()
+
+
+def test_menu_reports_malformed_json_without_overwriting_file(tmp_path, capsys) -> None:
+    data_file = tmp_path / "malformed.json"
+    original_contents = "{ this is not valid JSON"
+    data_file.write_text(original_contents, encoding="utf-8")
+
+    run_menu(data_file)
+
+    assert "Could not load PennyWise data" in capsys.readouterr().out
+    assert data_file.read_text(encoding="utf-8") == original_contents
