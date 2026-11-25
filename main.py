@@ -10,10 +10,20 @@ from expenses import (
     delete_expense,
     edit_expense,
     get_expense_by_id,
+    assign_missing_reference_ids,
     validate_amount,
     validate_date,
     validate_description,
     validate_category,
+)
+from goals import (
+    add_contribution,
+    calculate_goal_progress,
+    create_goal,
+    get_goal_by_number,
+    validate_goal_name,
+    validate_initial_savings,
+    validate_positive_amount,
 )
 from reports import build_monthly_report, validate_month_year
 from storage import DATA_FILE, load_data, save_data
@@ -25,12 +35,14 @@ def display_expenses(expenses: list[dict]) -> None:
         print("No expenses have been recorded yet.")
         return
 
-    print("\nRecorded expenses:")
+    print("\n===== RECORDED EXPENSES =====")
     for expense in expenses:
         print(
-            f"ID: {expense['id']} | {expense['date']} | "
-            f"${expense['amount']:.2f} | {expense['category']} | "
-            f"{expense['description']}"
+            f"\nID: {expense['reference_id']}\n"
+            f"Amount: ${expense['amount']:.2f}\n"
+            f"Category: {expense['category']}\n"
+            f"Description: {expense['description']}\n"
+            f"Date: {expense['date']}"
         )
 
 
@@ -116,7 +128,7 @@ def add_expense_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
     expense_date = prompt_date()
     expense = add_expense(data["expenses"], amount, category, description, expense_date)
     save_data(data, file_path)
-    print(f"Expense added. Its ID is {expense['id']}.")
+    print(f"Expense added successfully!\nExpense ID: {expense['reference_id']}")
 
 
 def edit_expense_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
@@ -125,7 +137,7 @@ def edit_expense_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
     if not data["expenses"]:
         return
 
-    expense_id = input("Enter the ID of the expense to edit: ").strip()
+    expense_id = input("Enter Expense ID: ").strip()
     try:
         current_expense = get_expense_by_id(data["expenses"], expense_id)
     except ValueError as error:
@@ -151,7 +163,7 @@ def delete_expense_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
     if not data["expenses"]:
         return
 
-    expense_id = input("Enter the ID of the expense to delete: ").strip()
+    expense_id = input("Enter Expense ID: ").strip()
     try:
         deleted_expense = delete_expense(data["expenses"], expense_id)
     except ValueError as error:
@@ -191,33 +203,124 @@ def display_monthly_overview(data: dict) -> None:
     print(f"Lowest Spending Category: {report['lowest_category']}")
 
 
+def prompt_goal_name() -> str:
+    """Ask until the user enters a non-empty savings goal name."""
+    while True:
+        try:
+            return validate_goal_name(input("Goal name: "))
+        except ValueError as error:
+            print(error)
+
+
+def prompt_goal_amount(label: str) -> float:
+    """Ask until the user enters a valid positive goal amount."""
+    while True:
+        try:
+            return validate_positive_amount(input(f"{label}: "), label.lower())
+        except ValueError as error:
+            print(error)
+
+
+def prompt_initial_savings() -> float:
+    """Ask until the user enters valid initial savings, including zero."""
+    while True:
+        try:
+            return validate_initial_savings(input("Amount already saved (use 0 if none): "))
+        except ValueError as error:
+            print(error)
+
+
+def display_savings_goals(goals: list[dict]) -> None:
+    """Print every savings goal and its progress."""
+    print("\n===== SAVINGS GOALS =====")
+    if not goals:
+        print("\nNo savings goals have been created yet.")
+        return
+
+    for number, goal in enumerate(goals, start=1):
+        progress = calculate_goal_progress(goal)
+        print(f"\n[{number}] {goal['name']}")
+        print(f"Target Amount:    ${goal['target_amount']:,.2f}")
+        print(f"Current Savings:  ${goal['current_savings']:,.2f}")
+        print(f"Remaining Amount: ${progress['remaining_amount']:,.2f}")
+        print(
+            f"\n{progress['bar']} "
+            f"{progress['progress_percentage']:.1f}%"
+        )
+        print(f"Status: {progress['status']}")
+
+
+def create_goal_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
+    """Collect savings goal details, create the goal, and save it."""
+    name = prompt_goal_name()
+    target_amount = prompt_goal_amount("Target amount")
+    current_savings = prompt_initial_savings()
+    create_goal(data["goals"], name, target_amount, current_savings)
+    save_data(data, file_path)
+    print("Savings goal created successfully!")
+
+
+def add_savings_contribution_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
+    """Select a goal, record a contribution, and save the updated data."""
+    if not data["goals"]:
+        print("No savings goals are available. Create a goal first.")
+        return
+
+    display_savings_goals(data["goals"])
+    try:
+        goal = get_goal_by_number(data["goals"], input("Select a goal number: ").strip())
+    except ValueError as error:
+        print(error)
+        return
+
+    amount = prompt_goal_amount("Contribution amount")
+    contribution = add_contribution(
+        data["goals"], data["savings_contributions"], goal["id"], amount
+    )
+    save_data(data, file_path)
+    print(
+        f"Added ${contribution['amount']:,.2f} to {goal['name']}. "
+        f"Updated savings: ${goal['current_savings']:,.2f}."
+    )
+
+
 def run_menu(file_path: Path = DATA_FILE) -> None:
     """Load saved data and repeatedly show the expense menu."""
     data = load_data(file_path)
+    if assign_missing_reference_ids(data["expenses"]):
+        save_data(data, file_path)
     menu_options = {
         "1": ("Add Expense", lambda saved_data: add_expense_from_menu(saved_data, file_path)),
         "2": ("View Expenses", lambda saved_data: display_expenses(saved_data["expenses"])),
         "3": ("Edit Expense", lambda saved_data: edit_expense_from_menu(saved_data, file_path)),
         "4": ("Delete Expense", lambda saved_data: delete_expense_from_menu(saved_data, file_path)),
         "5": ("Monthly Spending Overview", display_monthly_overview),
+        "6": ("Create Savings Goal", lambda saved_data: create_goal_from_menu(saved_data, file_path)),
+        "7": ("View Savings Goals", lambda saved_data: display_savings_goals(saved_data["goals"])),
+        "8": (
+            "Add Savings Contribution",
+            lambda saved_data: add_savings_contribution_from_menu(saved_data, file_path),
+        ),
     }
 
     while True:
         print("\n===== PENNYWISE =====")
         for number, (label, _) in menu_options.items():
             print(f"{number}. {label}")
-        print("6. Exit")
+        print("9. Exit")
 
         choice = input("Select an option: ").strip()
-        if choice == "6":
+        if choice == "9":
             print("Goodbye.")
             break
         if choice not in menu_options:
-            print("Please choose a number from 1 to 6.")
+            print("Please choose a number from 1 to 9.")
             continue
 
         _, selected_action = menu_options[choice]
         selected_action(data)
+        if choice in {"2", "7"}:
+            input("Press Enter to return to the menu...")
 
 
 def main() -> None:

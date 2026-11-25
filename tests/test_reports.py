@@ -94,7 +94,7 @@ def test_menu_displays_monthly_report_from_saved_expenses(tmp_path, monkeypatch,
     add_expense(data["expenses"], 50, "Food & Dining", "Groceries", "2026-11-18")
     add_expense(data["expenses"], 500, "Shopping", "Earlier month", "2026-10-25")
     save_data(data, data_file)
-    answers = iter(["5", "11", "2026", "6"])
+    answers = iter(["5", "11", "2026", "9"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
 
     run_menu(data_file)
