@@ -158,7 +158,7 @@ def test_menu_migrates_and_persists_reference_id_for_legacy_expense(
     ]
     save_data(data, data_file)
     monkeypatch.setattr("expenses.secrets.randbelow", lambda _limit: 654321)
-    answers = iter(["9"])
+    answers = iter(["1", "5", "5"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
 
     run_menu(data_file)
@@ -171,7 +171,7 @@ def test_menu_migrates_and_persists_reference_id_for_legacy_expense(
 
 def test_menu_adds_an_expense_and_saves_it(tmp_path, monkeypatch) -> None:
     data_file = tmp_path / "pennywise.json"
-    answers = iter(["1", "18.25", "1", "Groceries", "2026-03-15", "9"])
+    answers = iter(["1", "1", "18.25", "1", "Groceries", "2026-03-15", "5", "5"])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
 
     run_menu(data_file)

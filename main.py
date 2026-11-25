@@ -24,7 +24,11 @@ from goals import (
     validate_goal_name,
     validate_initial_savings,
     validate_positive_amount,
+    update_monthly_contribution,
+    update_goal_name,
+    update_goal_target_amount,
 )
+from coach import build_coach_analysis
 from reports import build_monthly_report, validate_month_year
 from storage import DATA_FILE, load_data, save_data
 
@@ -247,6 +251,16 @@ def display_savings_goals(goals: list[dict]) -> None:
             f"\n{progress['bar']} "
             f"{progress['progress_percentage']:.1f}%"
         )
+        print("\nCurrent Savings Plan:")
+        monthly_contribution = goal.get("planned_monthly_contribution")
+        if monthly_contribution is None:
+            print("Monthly savings plan not set")
+            if progress["estimated_months"] == 0:
+                print("Estimated Time: 0 months")
+        else:
+            print(f"Monthly Contribution: ${monthly_contribution:,.2f}")
+            estimated_months = progress["estimated_months"]
+            print(f"Estimated Time: {estimated_months} months")
         print(f"Status: {progress['status']}")
 
 
@@ -255,9 +269,63 @@ def create_goal_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
     name = prompt_goal_name()
     target_amount = prompt_goal_amount("Target amount")
     current_savings = prompt_initial_savings()
-    create_goal(data["goals"], name, target_amount, current_savings)
+    monthly_contribution = prompt_goal_amount("Planned monthly contribution")
+    create_goal(
+        data["goals"], name, target_amount, current_savings, monthly_contribution
+    )
     save_data(data, file_path)
     print("Savings goal created successfully!")
+
+
+def edit_savings_goal_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
+    """Select a goal and edit its name, target, or monthly contribution."""
+    if not data["goals"]:
+        print("No savings goals are available. Create a goal first.")
+        return
+
+    display_savings_goals(data["goals"])
+    try:
+        goal = get_goal_by_number(data["goals"], input("Select a goal number: ").strip())
+    except ValueError as error:
+        print(error)
+        return
+
+    while True:
+        print("\n===== EDIT SAVINGS GOAL =====")
+        print("4. Edit Goal Name")
+        print("5. Edit Target Amount")
+        print("6. Edit Monthly Contribution")
+        print("7. Return to Main Menu")
+        choice = input("Select an option: ").strip()
+
+        if choice == "7":
+            return
+        if choice == "4":
+            print(f"Current Goal Name: {goal['name']}")
+            update_goal_name(goal, prompt_goal_name())
+        elif choice == "5":
+            print(f"Current Target Amount: ${goal['target_amount']:,.2f}")
+            update_goal_target_amount(goal, prompt_goal_amount("New Target Amount"))
+        elif choice == "6":
+            monthly_contribution = goal.get("planned_monthly_contribution")
+            if monthly_contribution is None:
+                print("Current Monthly Contribution: Not set")
+            else:
+                print(f"Current Monthly Contribution: ${monthly_contribution:,.2f}")
+            update_monthly_contribution(
+                goal, prompt_goal_amount("New Monthly Contribution")
+            )
+        else:
+            print("Please choose a number from 4 to 7.")
+            continue
+
+        save_data(data, file_path)
+        progress = calculate_goal_progress(goal)
+        print("Savings goal updated successfully!")
+        print(f"Remaining Amount: ${progress['remaining_amount']:,.2f}")
+        print(f"Progress: {progress['progress_percentage']:.1f}%")
+        print(f"Estimated Time: {progress['estimated_months']} months")
+        print(f"Status: {progress['status']}")
 
 
 def add_savings_contribution_from_menu(data: dict, file_path: Path = DATA_FILE) -> None:
@@ -278,49 +346,189 @@ def add_savings_contribution_from_menu(data: dict, file_path: Path = DATA_FILE) 
         data["goals"], data["savings_contributions"], goal["id"], amount
     )
     save_data(data, file_path)
+    progress = calculate_goal_progress(goal)
     print(
         f"Added ${contribution['amount']:,.2f} to {goal['name']}. "
         f"Updated savings: ${goal['current_savings']:,.2f}."
     )
+    if progress["estimated_months"] is None:
+        print("Estimated time is unavailable until a monthly savings plan is set.")
+    else:
+        print(f"Updated estimated time: {progress['estimated_months']} months.")
+
+
+def display_financial_coach(data: dict) -> None:
+    """Ask for a month and display rule-based financial coaching insights."""
+    while True:
+        month = input("Month (1-12): ").strip()
+        year = input("Year (for example, 2026): ").strip()
+        try:
+            month, year = validate_month_year(month, year)
+            break
+        except ValueError as error:
+            print(error)
+
+    analysis = build_coach_analysis(data["expenses"], data["goals"], month, year)
+    print("\n===== AI FINANCIAL COACH =====")
+    print(f"\nMonth: {month_name[month]} {year}")
+    print(f"Total Monthly Spending: ${analysis['total']:.2f}")
+    print("These guidelines are general suggestions, not universal standards.")
+
+    if analysis["message"]:
+        print(f"\n{analysis['message']}")
+    else:
+        print("\nAI Insight:")
+        for insight in analysis["insights"]:
+            print(
+                f"Your {insight['category'].lower()} spending accounts for "
+                f"{insight['percentage']:.1f}% of your monthly expenses."
+            )
+            print(
+                f"This is above the suggested guideline of "
+                f"{insight['threshold']}%. {insight['message']}"
+            )
+            if analysis["goal"]:
+                if analysis["goal"].get("planned_monthly_contribution") is None:
+                    print(
+                        f'Reducing {insight["category"].lower()} expenses by '
+                        f"${insight['suggested_reduction']:.2f} per month could help you "
+                        f"reach your \"{analysis['goal']['name']}\" savings goal sooner."
+                    )
+                else:
+                    print(
+                        f'Reducing {insight["category"].lower()} expenses by '
+                        f"${insight['suggested_reduction']:.2f} per month could help you "
+                        f"reach your \"{analysis['goal']['name']}\" savings goal sooner."
+                    )
+            else:
+                print(
+                    f"Reducing {insight['category'].lower()} expenses by "
+                    f"${insight['suggested_reduction']:.2f} per month could increase "
+                    "your available savings."
+                )
+
+        if analysis["goal"]:
+            progress = analysis["goal_progress"]
+            if analysis["goal"].get("planned_monthly_contribution") is None:
+                print("\nMonthly savings plan not set. Consider setting one to estimate progress.")
+            print("\nCurrent Goal Progress:")
+            print(f"{progress['bar']} {min(progress['progress_percentage'], 100):.1f}%")
+            print(f"Remaining Savings: ${progress['remaining_amount']:,.2f}")
+            total_potential_savings = sum(
+                insight["suggested_reduction"] for insight in analysis["insights"]
+            )
+            print(
+                f"Potential Additional Savings: ${total_potential_savings:.2f} per month."
+            )
+            projection = analysis["goal_projection"]
+            if projection:
+                print("\nProjected Impact on Your Savings Goal:")
+                print(f"Current Goal Progress: {projection['current_progress']:.2f}%")
+                print(
+                    "Next Month (Current Plan): "
+                    f"{projection['current_plan_progress']:.2f}%"
+                )
+                print(
+                    "Next Month (With AI Advice): "
+                    f"{projection['progress_with_advice']:.2f}%"
+                )
+                print(
+                    f"By redirecting ${projection['suggested_reductions']:.2f} toward "
+                    "your savings goal, you could gain an additional "
+                    f"{projection['additional_progress']:.2f} percentage points of "
+                    "progress next month."
+                )
+                print(
+                    "This projection assumes you maintain your planned monthly "
+                    "contribution and successfully redirect the suggested spending "
+                    "reduction toward your savings goal. It is an estimate, not a "
+                    "guarantee, and does not assume that you can afford either amount."
+                )
+        elif analysis["completed_goals_message"]:
+            print(f"\n{analysis['completed_goals_message']}")
+
+    input("Press Enter to return to the main menu...")
 
 
 def run_menu(file_path: Path = DATA_FILE) -> None:
-    """Load saved data and repeatedly show the expense menu."""
+    """Load saved data and repeatedly show the main menu."""
     data = load_data(file_path)
     if assign_missing_reference_ids(data["expenses"]):
         save_data(data, file_path)
-    menu_options = {
-        "1": ("Add Expense", lambda saved_data: add_expense_from_menu(saved_data, file_path)),
-        "2": ("View Expenses", lambda saved_data: display_expenses(saved_data["expenses"])),
-        "3": ("Edit Expense", lambda saved_data: edit_expense_from_menu(saved_data, file_path)),
-        "4": ("Delete Expense", lambda saved_data: delete_expense_from_menu(saved_data, file_path)),
-        "5": ("Monthly Spending Overview", display_monthly_overview),
-        "6": ("Create Savings Goal", lambda saved_data: create_goal_from_menu(saved_data, file_path)),
-        "7": ("View Savings Goals", lambda saved_data: display_savings_goals(saved_data["goals"])),
-        "8": (
-            "Add Savings Contribution",
-            lambda saved_data: add_savings_contribution_from_menu(saved_data, file_path),
-        ),
-    }
-
     while True:
         print("\n===== PENNYWISE =====")
-        for number, (label, _) in menu_options.items():
-            print(f"{number}. {label}")
-        print("9. Exit")
+        print("1. Manage Expenses")
+        print("2. Monthly Spending Overview")
+        print("3. Manage Savings Goals")
+        print("4. AI Financial Coach")
+        print("5. Exit")
 
         choice = input("Select an option: ").strip()
-        if choice == "9":
+        if choice == "1":
+            manage_expenses_menu(data, file_path)
+        elif choice == "2":
+            display_monthly_overview(data)
+        elif choice == "3":
+            manage_savings_goals_menu(data, file_path)
+        elif choice == "4":
+            display_financial_coach(data)
+        elif choice == "5":
             print("Goodbye.")
             break
-        if choice not in menu_options:
-            print("Please choose a number from 1 to 9.")
-            continue
+        else:
+            print("Please choose a number from 1 to 5.")
 
-        _, selected_action = menu_options[choice]
-        selected_action(data)
-        if choice in {"2", "7"}:
-            input("Press Enter to return to the menu...")
+
+def manage_expenses_menu(data: dict, file_path: Path = DATA_FILE) -> None:
+    """Show expense actions until the user returns to the main menu."""
+    while True:
+        print("\n===== MANAGE EXPENSES =====")
+        print("1. Add Expense")
+        print("2. View Expenses")
+        print("3. Edit Expense")
+        print("4. Delete Expense")
+        print("5. Back to Main Menu")
+
+        choice = input("Select an option: ").strip()
+        if choice == "1":
+            add_expense_from_menu(data, file_path)
+        elif choice == "2":
+            display_expenses(data["expenses"])
+            input("Press Enter to return to the Manage Expenses submenu...")
+        elif choice == "3":
+            edit_expense_from_menu(data, file_path)
+        elif choice == "4":
+            delete_expense_from_menu(data, file_path)
+        elif choice == "5":
+            return
+        else:
+            print("Please choose a number from 1 to 5.")
+
+
+def manage_savings_goals_menu(data: dict, file_path: Path = DATA_FILE) -> None:
+    """Show savings actions until the user returns to the main menu."""
+    while True:
+        print("\n===== MANAGE SAVINGS GOALS =====")
+        print("1. Create Savings Goal")
+        print("2. View Savings Goals")
+        print("3. Add Savings Contribution")
+        print("4. Edit Savings Goal")
+        print("5. Back to Main Menu")
+
+        choice = input("Select an option: ").strip()
+        if choice == "1":
+            create_goal_from_menu(data, file_path)
+        elif choice == "2":
+            display_savings_goals(data["goals"])
+            input("Press Enter to return to the Manage Savings Goals submenu...")
+        elif choice == "3":
+            add_savings_contribution_from_menu(data, file_path)
+        elif choice == "4":
+            edit_savings_goal_from_menu(data, file_path)
+        elif choice == "5":
+            return
+        else:
+            print("Please choose a number from 1 to 5.")
 
 
 def main() -> None:

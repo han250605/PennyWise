@@ -1,5 +1,6 @@
 """Create savings goals and track contributions toward them."""
 
+from math import ceil
 from math import isfinite
 from uuid import uuid4
 
@@ -40,21 +41,30 @@ def validate_initial_savings(amount: float | str) -> float:
 
 
 def calculate_goal_progress(goal: dict) -> dict:
-    """Return remaining amount, progress percentage, status, and progress bar."""
+    """Return remaining amount, progress, status, bar, and estimated months."""
     target_amount = goal["target_amount"]
     current_savings = goal["current_savings"]
     remaining_amount = max(0, target_amount - current_savings)
-    progress_percentage = current_savings / target_amount * 100
+    progress_percentage = min(current_savings / target_amount * 100, 100)
     filled_length = round(min(progress_percentage, 100) / 100 * PROGRESS_BAR_WIDTH)
     if current_savings > 0 and filled_length == 0:
         filled_length = 1
 
     achieved = current_savings >= target_amount
+    monthly_contribution = goal.get("planned_monthly_contribution")
+    if achieved:
+        estimated_months = 0
+    elif monthly_contribution:
+        estimated_months = ceil(remaining_amount / monthly_contribution)
+    else:
+        estimated_months = None
+
     return {
         "remaining_amount": remaining_amount,
         "progress_percentage": progress_percentage,
         "bar": "█" * filled_length + "░" * (PROGRESS_BAR_WIDTH - filled_length),
         "status": "Goal achieved!" if achieved else "In Progress",
+        "estimated_months": estimated_months,
     }
 
 
@@ -63,18 +73,45 @@ def create_goal(
     name: str,
     target_amount: float | str,
     current_savings: float | str = 0,
+    planned_monthly_contribution: float | str | None = None,
 ) -> dict:
     """Validate and append a new goal to the goals list."""
     clean_name = validate_goal_name(name)
     valid_target = validate_positive_amount(target_amount, "target amount")
     valid_savings = validate_initial_savings(current_savings)
+    valid_monthly_contribution = (
+        validate_positive_amount(planned_monthly_contribution, "planned monthly contribution")
+        if planned_monthly_contribution is not None
+        else None
+    )
     goal = {
         "id": uuid4().hex,
         "name": clean_name,
         "target_amount": valid_target,
         "current_savings": valid_savings,
+        "planned_monthly_contribution": valid_monthly_contribution,
     }
     goals.append(goal)
+    return goal
+
+
+def update_monthly_contribution(goal: dict, amount: float | str) -> dict:
+    """Validate and update a goal's planned monthly contribution."""
+    goal["planned_monthly_contribution"] = validate_positive_amount(
+        amount, "planned monthly contribution"
+    )
+    return goal
+
+
+def update_goal_name(goal: dict, name: str) -> dict:
+    """Validate and update a goal name without changing other goal data."""
+    goal["name"] = validate_goal_name(name)
+    return goal
+
+
+def update_goal_target_amount(goal: dict, amount: float | str) -> dict:
+    """Validate and update a goal target without changing current savings."""
+    goal["target_amount"] = validate_positive_amount(amount, "target amount")
     return goal
 
 
